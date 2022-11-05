@@ -18,10 +18,45 @@ from pytz import timezone
 from sqlalchemy.exc import ProgrammingError
 
 from ...config.settings import config
-from ...db.init_db import db
+from ...db.init_db import app, db
 from ...models.token_storage import OauthStorage
 from ...schemas.request_schema import RequestSchema
 from ...schemas.response_schema import GoogleCalendarResponseSchema
+
+
+@doc(
+    description="List the busy days for a single day input of the year",
+    tags=["Google", "Google Calendar"],
+)
+@app.route("/google/consultation/<date>")
+@marshal_with(GoogleCalendarResponseSchema)
+def get_single_day_calendar(date):
+    brazil = timezone("America/Sao_Paulo")
+    received_date = datetime.datetime.strptime(date, "%d-%m-%Y").replace(
+        hour=00, minute=00, microsecond=30, tzinfo=brazil
+    )
+    end_of_day = received_date.replace(
+        hour=23, minute=59, microsecond=30, tzinfo=brazil
+    )
+    ic(received_date)
+    ic(received_date.weekday())
+    info = GoogleCalendar().get_google_calendar_response(
+        payload={
+            "timeMin": received_date.isoformat(),
+            "timeMax": end_of_day.isoformat(),
+            "items": [{"id": "primary"}],
+        },
+        day_of_the_week=received_date.weekday(),
+    )
+    return info, 200
+
+
+def get_brazil_time(time):
+    brazil = timezone("America/Sao_Paulo")
+    # Should catch edge cases such as summer time, someone checking around midnight, etc.
+    brazil_time = time.astimezone(brazil)
+    brazil_day = brazil_time.replace(hour=00, minute=00)
+    return brazil_day
 
 
 class GoogleCalendar(MethodResource, Resource):
@@ -32,32 +67,7 @@ class GoogleCalendar(MethodResource, Resource):
     @marshal_with(GoogleCalendarResponseSchema)
     def get(self):
         (payload, day_of_the_week) = self.__build_freebusy_payload()
-        credentials = OauthStorage.query.get(1)
-        dictionary_credentials = credentials.__dict__
-        del dictionary_credentials["_sa_instance_state"]
-        del dictionary_credentials["id"]
-        try:
-            creds = google.oauth2.credentials.Credentials(**dictionary_credentials)
-            service = build("calendar", "v3", credentials=creds)
-
-            freebusy_result = service.freebusy().query(body=payload).execute()
-            busy_times = (
-                freebusy_result.get("calendars", {"primary": {"busy": []}})
-                .get("primary", {"busy": []})
-                .get("busy")
-            )
-            if not busy_times:
-                return {}, 200
-        except HttpError as error:
-            return {"message": "Error retrieving busy times: " + str(error)}, 400
-
-        info = {
-            "busyTimes": busy_times,
-            "weekday": day_of_the_week  # NOTE 0 - monday, 6 - sunday,
-            # useful for building front-end of the calendar.
-            # This is different from javascript, so keep in mind.
-        }
-
+        info = self.get_google_calendar_response(payload, day_of_the_week)
         return info, 200
 
     @doc(description="Create an consultation time", tags=["Google", "Google Calendar"])
@@ -67,10 +77,7 @@ class GoogleCalendar(MethodResource, Resource):
 
     def __build_freebusy_payload(self):
         time = datetime.datetime.now(datetime.timezone.utc)
-        brazil = timezone("America/Sao_Paulo")
-        # Should catch edge cases such as summer time, someone checking around midnight, etc.
-        brazil_time = time.astimezone(brazil)
-        brazil_day = brazil_time.replace(hour=00, minute=00)
+        brazil_day = get_brazil_time(time)
         in_30_days = (brazil_day + datetime.timedelta(days=30)).replace(
             hour=23, minute=59
         )
@@ -82,6 +89,42 @@ class GoogleCalendar(MethodResource, Resource):
             },
             brazil_day.weekday(),
         )
+
+    def get_google_calendar_response(self, payload, day_of_the_week):
+        credentials = OauthStorage.query.get(1)
+        dictionary_credentials = credentials.__dict__
+        del dictionary_credentials["_sa_instance_state"]
+        del dictionary_credentials["id"]
+        weekday_to_string_enum = {
+            0: "Segunda",
+            1: "Terça",
+            2: "Quarta",
+            3: "Quinta",
+            4: "Sexta",
+            5: "Sábado",
+            6: "Domingo",
+        }
+        try:
+            creds = google.oauth2.credentials.Credentials(**dictionary_credentials)
+            service = build("calendar", "v3", credentials=creds)
+            ic(payload)
+            freebusy_result = service.freebusy().query(body=payload).execute()
+            busy_times = (
+                freebusy_result.get("calendars", {"primary": {"busy": []}})
+                .get("primary", {"busy": []})
+                .get("busy")
+            )
+            if not busy_times:
+                return {
+                    "busyTimes": busy_times,
+                    "weekday": weekday_to_string_enum[day_of_the_week],
+                }  # TODO need to get the weekday in the empty response too!
+        except HttpError as error:
+            return {"message": "Error retrieving busy times: " + str(error)}
+        return {
+            "busyTimes": busy_times,
+            "weekday": weekday_to_string_enum[day_of_the_week],
+        }
 
 
 # class GoogleCalendarListDay(MethodResource, Resource):

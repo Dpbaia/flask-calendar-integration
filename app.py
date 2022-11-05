@@ -12,7 +12,10 @@ from app.api.routers.calendar.google_authorization import (
     GoogleAuthorization,
     GoogleCallback,
 )
-from app.api.routers.calendar.google_calendar import GoogleCalendar
+from app.api.routers.calendar.google_calendar import (
+    GoogleCalendar,
+    get_single_day_calendar,
+)
 from app.api.routers.example import ExampleAPI, NewClass
 
 api = Api(app)
@@ -36,6 +39,7 @@ docs.register(NewClass)
 docs.register(GoogleAuthorization)
 docs.register(GoogleCallback)
 docs.register(GoogleCalendar)
+docs.register(get_single_day_calendar)
 
 
 @app.route("/")
