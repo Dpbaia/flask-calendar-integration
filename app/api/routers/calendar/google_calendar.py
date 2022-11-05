@@ -15,48 +15,13 @@ from googleapiclient.errors import HttpError
 from icecream import ic
 from marshmallow import fields
 from pytz import timezone
-from sqlalchemy.exc import ProgrammingError
 
 from ...config.settings import config
-from ...db.init_db import app, db
 from ...models.token_storage import OauthStorage
-from ...schemas.request_schema import RequestSchema
+from ...schemas.request_schema import RequestDateSchema
 from ...schemas.response_schema import GoogleCalendarResponseSchema
 
-
-@doc(
-    description="List the busy days for a single day input of the year",
-    tags=["Google", "Google Calendar"],
-)
-@app.route("/google/consultation/<date>")
-@marshal_with(GoogleCalendarResponseSchema)
-def get_single_day_calendar(date):
-    brazil = timezone("America/Sao_Paulo")
-    received_date = datetime.datetime.strptime(date, "%d-%m-%Y").replace(
-        hour=00, minute=00, microsecond=30, tzinfo=brazil
-    )
-    end_of_day = received_date.replace(
-        hour=23, minute=59, microsecond=30, tzinfo=brazil
-    )
-    ic(received_date)
-    ic(received_date.weekday())
-    info = GoogleCalendar().get_google_calendar_response(
-        payload={
-            "timeMin": received_date.isoformat(),
-            "timeMax": end_of_day.isoformat(),
-            "items": [{"id": "primary"}],
-        },
-        day_of_the_week=received_date.weekday(),
-    )
-    return info, 200
-
-
-def get_brazil_time(time):
-    brazil = timezone("America/Sao_Paulo")
-    # Should catch edge cases such as summer time, someone checking around midnight, etc.
-    brazil_time = time.astimezone(brazil)
-    brazil_day = brazil_time.replace(hour=00, minute=00)
-    return brazil_day
+# TODO separate the google calendar controller from the front-end
 
 
 class GoogleCalendar(MethodResource, Resource):
@@ -64,10 +29,13 @@ class GoogleCalendar(MethodResource, Resource):
         description="List events for one month starting from the current date",
         tags=["Google", "Google Calendar"],
     )
+    @use_kwargs(RequestDateSchema, location=("query"))
     @marshal_with(GoogleCalendarResponseSchema)
-    def get(self):
-        (payload, day_of_the_week) = self.__build_freebusy_payload()
-        info = self.get_google_calendar_response(payload, day_of_the_week)
+    def get(self, date=None):
+        if date:
+            info = self.__get_single_day_calendar(date)
+        else:
+            info = self.__get_thirty_days_calendar()
         return info, 200
 
     @doc(description="Create an consultation time", tags=["Google", "Google Calendar"])
@@ -75,13 +43,38 @@ class GoogleCalendar(MethodResource, Resource):
     def post(self):
         pass
 
-    def __build_freebusy_payload(self):
+    def __get_single_day_calendar(self, date):
+        brazil = timezone("America/Sao_Paulo")
+        received_date = datetime.datetime.strptime(date, "%d-%m-%Y").replace(
+            hour=00, minute=00, microsecond=30, tzinfo=brazil
+        )
+        end_of_day = received_date.replace(
+            hour=23, minute=59, microsecond=30, tzinfo=brazil
+        )
+        info = GoogleCalendar().__get_google_calendar_response(
+            payload={
+                "timeMin": received_date.isoformat(),
+                "timeMax": end_of_day.isoformat(),
+                "items": [{"id": "primary"}],
+            },
+            day_of_the_week=received_date.weekday(),
+        )
+        return info
+
+    def __get_brazil_time(self, time):
+        brazil = timezone("America/Sao_Paulo")
+        # Should catch edge cases such as summer time, someone checking around midnight, etc.
+        brazil_time = time.astimezone(brazil)
+        brazil_day = brazil_time.replace(hour=00, minute=00)
+        return brazil_day
+
+    def __get_thirty_days_calendar(self):
         time = datetime.datetime.now(datetime.timezone.utc)
-        brazil_day = get_brazil_time(time)
+        brazil_day = self.__get_brazil_time(time)
         in_30_days = (brazil_day + datetime.timedelta(days=30)).replace(
             hour=23, minute=59
         )
-        return (
+        info = self.__get_google_calendar_response(
             {
                 "timeMin": brazil_day.isoformat(),
                 "timeMax": in_30_days.isoformat(),
@@ -89,8 +82,9 @@ class GoogleCalendar(MethodResource, Resource):
             },
             brazil_day.weekday(),
         )
+        return info
 
-    def get_google_calendar_response(self, payload, day_of_the_week):
+    def __get_google_calendar_response(self, payload, day_of_the_week):
         credentials = OauthStorage.query.get(1)
         dictionary_credentials = credentials.__dict__
         del dictionary_credentials["_sa_instance_state"]
@@ -107,7 +101,6 @@ class GoogleCalendar(MethodResource, Resource):
         try:
             creds = google.oauth2.credentials.Credentials(**dictionary_credentials)
             service = build("calendar", "v3", credentials=creds)
-            ic(payload)
             freebusy_result = service.freebusy().query(body=payload).execute()
             busy_times = (
                 freebusy_result.get("calendars", {"primary": {"busy": []}})

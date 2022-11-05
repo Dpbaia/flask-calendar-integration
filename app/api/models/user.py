@@ -1,4 +1,4 @@
-from app.api.db.init_db import db
+from app.api.db.db import db
 from passlib.apps import custom_app_context as pwd_context
 from sqlalchemy import Column, Identity, Integer, String
 from sqlalchemy.orm import validates

@@ -1,22 +1,24 @@
 import os
 
-from flask import request
+from flask import Flask, request
 from flask_apispec.extension import FlaskApiSpec
 from flask_cors import CORS
 from flask_restful import Api
 from markupsafe import escape
 
 from app.api.config.settings import config
-from app.api.db.init_db import app
+from app.api.db.db import db, url
 from app.api.routers.calendar.google_authorization import (
     GoogleAuthorization,
     GoogleCallback,
 )
-from app.api.routers.calendar.google_calendar import (
-    GoogleCalendar,
-    get_single_day_calendar,
-)
+from app.api.routers.calendar.google_calendar import GoogleCalendar
 from app.api.routers.example import ExampleAPI, NewClass
+
+app = Flask(__name__)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = url
+db.init_app(app)
 
 api = Api(app)
 cors = CORS(app, resources={r"/*": {"origins": config["link_frontend"]}})
@@ -39,7 +41,6 @@ docs.register(NewClass)
 docs.register(GoogleAuthorization)
 docs.register(GoogleCallback)
 docs.register(GoogleCalendar)
-docs.register(get_single_day_calendar)
 
 
 @app.route("/")

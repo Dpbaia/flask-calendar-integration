@@ -1,4 +1,4 @@
-from app.api.db.init_db import db
+from app.api.db.db import db
 from sqlalchemy import ARRAY, Column, Identity, Integer, String
 
 

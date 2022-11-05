@@ -8,7 +8,7 @@ from flask_restful import Resource
 from sqlalchemy.exc import ProgrammingError
 
 from ...config.settings import config
-from ...db.init_db import db
+from ...db.db import db
 from ...models.token_storage import OauthStorage
 from ...schemas.response_schema import GoogleAuthResponseSchema
 
