@@ -18,4 +18,4 @@ class GoogleDateSchema(Schema):
 class GoogleCalendarResponseSchema(Schema):
     message = fields.Str(default="Success")
     busyTimes = fields.List(fields.Nested(GoogleDateSchema()), default=[])
-    weekday = fields.Str()
+    weekday = fields.Str(default="")
