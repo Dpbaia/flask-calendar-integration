@@ -1,9 +1,20 @@
-from flask_apispec import doc, marshal_with, use_kwargs
-from flask_apispec.views import MethodResource
-from flask_restful import Resource
+import json
+import os
+import sqlite3
 
-from ...schemas.request_schema import RequestSchema
-from ...schemas.response_schema import ResponseSchema
+import requests
+from db.db import db
+from flask import Flask, redirect, request, url_for
+from flask_login import (
+    LoginManager,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from oauthlib.oauth2 import WebApplicationClient
+
+from app.api.config.settings import config
 
 # # create login endpoint
 # class ExampleAPI(MethodResource, Resource):

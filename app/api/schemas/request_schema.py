@@ -1,12 +1,12 @@
-from marshmallow import Schema, fields, validate
-
-
-class RequestSchema(Schema):
-    api_type = fields.String(required=True, description="API type of awesome API")
+from marshmallow import Schema, fields
 
 
 class RequestDateSchema(Schema):
     date = fields.String(required=False, description="dd-mm-yyyy")
+
+
+class RequestAdminId(Schema):
+    admin = fields.String(required=False, description="Admin key")
 
 
 class RequestConsultationSchema(Schema):

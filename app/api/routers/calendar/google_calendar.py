@@ -6,6 +6,7 @@ from flask_apispec.views import MethodResource
 from flask_restful import Resource
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from icecream import ic
 from pytz import timezone
 
 from ...config.settings import config
@@ -96,10 +97,14 @@ class GoogleCalendar(MethodResource, Resource):
         return info
 
     def __get_google_authorization(self):
-        credentials = OauthStorage.query.get(1)
+        credentials = OauthStorage.query.filter(
+            OauthStorage.user_type == "admin"
+        ).first()
         dictionary_credentials = credentials.__dict__
+        ic(dictionary_credentials)
         del dictionary_credentials["_sa_instance_state"]
         del dictionary_credentials["id"]
+        del dictionary_credentials["user_type"]
         creds = google.oauth2.credentials.Credentials(**dictionary_credentials)
         return creds
 

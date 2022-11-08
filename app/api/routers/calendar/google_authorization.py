@@ -2,10 +2,13 @@ import json
 
 import flask
 import google_auth_oauthlib.flow
-from flask_apispec import doc, marshal_with
+from flask_apispec import doc, marshal_with, use_kwargs
 from flask_apispec.views import MethodResource
 from flask_restful import Resource
+from icecream import ic
 from sqlalchemy.exc import ProgrammingError
+
+from app.api.schemas.request_schema import RequestAdminId
 
 from ...config.settings import config
 from ...db.db import db
@@ -20,8 +23,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.freebusy",
 ]
 
-# TODO add scopes without public calendar and events.owned
-# so that people can login with google and compare with their own events
+SCOPES_PUBLIC = [
+    "https://www.googleapis.com/auth/calendar.freebusy",
+]
 
 
 def credentials_to_dict(credentials):
@@ -37,13 +41,19 @@ def credentials_to_dict(credentials):
 
 class GoogleAuthorization(MethodResource, Resource):
     @doc(description="Authorize the google calendar app", tags=["Google"])
+    @use_kwargs(RequestAdminId, location=("query"))
     @marshal_with(GoogleAuthResponseSchema)
-    def get(self):
+    def get(self, admin=None):
+        current_scopes = SCOPES if admin == config["admin_key"] else SCOPES_PUBLIC
+        ic(current_scopes)
         flow = google_auth_oauthlib.flow.Flow.from_client_config(
-            json.loads(config["client_credentials"]), scopes=SCOPES
+            json.loads(config["client_credentials"]), scopes=current_scopes
         )
-        flow.redirect_uri = config["redirect_uri"]
-
+        flow.redirect_uri = (
+            config["redirect_uri"]
+            if admin == config["admin_key"]
+            else config["public_redirect_uri"]
+        )
         authorization_url, state = flow.authorization_url(
             # Enable offline access so that you can refresh an access token without
             # re-prompting the user for permission. Recommended for web server apps.
@@ -62,11 +72,9 @@ class GoogleCallback(MethodResource, Resource):
     @doc(description="Receive the credentials to be stored", tags=["Google"])
     @marshal_with(GoogleAuthResponseSchema)
     def get(self):
-        db.create_all()
         # Specify the state when creating the flow in the callback so that it can
         # verified in the authorization server response.
         state = flask.session["state"]
-
         flow = google_auth_oauthlib.flow.Flow.from_client_config(
             json.loads(config["client_credentials"]), scopes=SCOPES, state=state
         )
@@ -87,10 +95,11 @@ class GoogleCallback(MethodResource, Resource):
         #              credentials in a persistent database instead.
         credentials = flow.credentials
         try:
-            "updating entry"
-            storage = OauthStorage.query.get(1)
-            if not storage:
-                store_credentials = OauthStorage(**credentials_to_dict(credentials))
+            storage = OauthStorage.query.filter(OauthStorage.user_type == "admin")
+            if not storage.first():
+                store_credentials = OauthStorage(
+                    **(credentials_to_dict(credentials) | {"user_type": "admin"})
+                )
                 db.session.add(store_credentials)
                 db.session.commit()
             else:
@@ -105,6 +114,7 @@ class GoogleCallback(MethodResource, Resource):
                 db.session.commit()
         except ProgrammingError as e:
             if e.code == "f405":
+                ic(str(e))
                 store_credentials = OauthStorage(**credentials_to_dict(credentials))
                 db.session.add(store_credentials)
                 db.session.commit()
@@ -112,3 +122,42 @@ class GoogleCallback(MethodResource, Resource):
             return {"message": "error: " + str(e)}, 400
         flask.session["credentials"] = credentials_to_dict(credentials)
         return {"message": "Stored credentials successfully"}, 201
+
+
+class GooglePublicCallback(MethodResource, Resource):
+    @doc(description="Allows login from users", tags=["Google"])
+    @marshal_with(GoogleAuthResponseSchema)
+    def get(self):
+        # Specify the state when creating the flow in the callback so that it can
+        # verified in the authorization server response.
+        state = flask.session["state"]
+        flow = google_auth_oauthlib.flow.Flow.from_client_config(
+            json.loads(config["client_credentials"]), scopes=SCOPES_PUBLIC, state=state
+        )
+
+        # flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
+        #     CLIENT_SECRETS_FILE, scopes=SCOPES, state=state
+        # )
+        flow.redirect_uri = flask.url_for(
+            "googlepubliccallback", _external=True
+        )  # TODO change to the front-end url.
+
+        # Use the authorization server's response to fetch the OAuth 2.0 tokens.
+        authorization_response = flask.request.url
+        flow.fetch_token(authorization_response=authorization_response)
+
+        # Store credentials in the session.
+        # ACTION ITEM: In a production app, you likely want to save these
+        #              credentials in a persistent database instead.
+        credentials = flow.credentials
+        dict_credentials = credentials_to_dict(credentials)
+        flask.session["credentials"] = dict_credentials
+        ic(dict_credentials)
+        return {}
+
+
+class GoogleLogout(MethodResource, Resource):
+    @doc(description="Allows users to log out", tags=["Google"])
+    @marshal_with(GoogleAuthResponseSchema)
+    def get(self):
+        flask.session.clear()

@@ -11,9 +11,10 @@ from app.api.db.db import db, url
 from app.api.routers.calendar.google_authorization import (
     GoogleAuthorization,
     GoogleCallback,
+    GoogleLogout,
+    GooglePublicCallback,
 )
 from app.api.routers.calendar.google_calendar import GoogleCalendar
-from app.api.routers.example import ExampleAPI, NewClass
 
 app = Flask(__name__)
 
@@ -27,20 +28,20 @@ cors = CORS(app, resources={r"/*": {"origins": config["link_frontend"]}})
 # TODO implement sentry monitoring
 # TODO maybe refactor this whole add resource and register to a loop?
 
-api.add_resource(ExampleAPI, "/awesome")
-api.add_resource(NewClass, "/newclass")
 api.add_resource(GoogleAuthorization, "/google/authorization")
 api.add_resource(GoogleCallback, "/google/callback")
+api.add_resource(GooglePublicCallback, "/google/public-callback")
 api.add_resource(GoogleCalendar, "/google/consultation")
+api.add_resource(GoogleLogout, "/google/logout")
 
 
 docs = FlaskApiSpec(app)
 
-docs.register(ExampleAPI)
-docs.register(NewClass)
 docs.register(GoogleAuthorization)
 docs.register(GoogleCallback)
+docs.register(GooglePublicCallback)
 docs.register(GoogleCalendar)
+docs.register(GoogleLogout)
 
 
 @app.route("/")
