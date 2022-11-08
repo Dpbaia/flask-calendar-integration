@@ -5,7 +5,7 @@ from app.api.db.db import db
 
 class OauthStorage(db.Model):
     __tablename__ = "oauthstorage"
-    id = Column(Integer(), Identity(start=1), primary_key=True)
+    id = Column(Integer(), Identity(start=1, increment=1), primary_key=True)
     token = Column(String(1000))
     refresh_token = Column(String(1000))
     token_uri = Column(String(1000))
@@ -17,3 +17,15 @@ class OauthStorage(db.Model):
 
     def __repr__(self):
         return "<Id %r>" % self.id
+
+    def is_authenticated(self):
+        return bool(self.user_type)
+
+    def is_active(self):
+        return bool(self.user_type)
+
+    def is_anonymous(self):
+        return bool(self.user_type)
+
+    def get_id(self):
+        return self.id

@@ -16,6 +16,8 @@ from ...schemas.response_schema import GoogleCalendarResponseSchema
 
 # TODO separate the google calendar controller from the view
 # TODO see folder ref
+# TODO get both the admin AND the logged in person's schedule.
+# TODO add required to be logged in to use
 
 
 class GoogleCalendar(MethodResource, Resource):

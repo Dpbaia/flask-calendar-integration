@@ -4,6 +4,7 @@ import flask
 import google_auth_oauthlib.flow
 from flask_apispec import doc, marshal_with, use_kwargs
 from flask_apispec.views import MethodResource
+from flask_login import current_user, login_required, login_user, logout_user
 from flask_restful import Resource
 from icecream import ic
 from sqlalchemy.exc import ProgrammingError
@@ -41,11 +42,10 @@ def credentials_to_dict(credentials):
 
 class GoogleAuthorization(MethodResource, Resource):
     @doc(description="Authorize the google calendar app", tags=["Google"])
-    @use_kwargs(RequestAdminId, location=("query"))
+    @use_kwargs(RequestAdminId, location=("headers"))
     @marshal_with(GoogleAuthResponseSchema)
     def get(self, admin=None):
         current_scopes = SCOPES if admin == config["admin_key"] else SCOPES_PUBLIC
-        ic(current_scopes)
         flow = google_auth_oauthlib.flow.Flow.from_client_config(
             json.loads(config["client_credentials"]), scopes=current_scopes
         )
@@ -94,6 +94,7 @@ class GoogleCallback(MethodResource, Resource):
         # ACTION ITEM: In a production app, you likely want to save these
         #              credentials in a persistent database instead.
         credentials = flow.credentials
+        store_credentials = OauthStorage()
         try:
             storage = OauthStorage.query.filter(OauthStorage.user_type == "admin")
             if not storage.first():
@@ -103,24 +104,24 @@ class GoogleCallback(MethodResource, Resource):
                 db.session.add(store_credentials)
                 db.session.commit()
             else:
+                store_credentials = storage.first()
                 dict_credentials = credentials_to_dict(credentials)
-                storage.token = dict_credentials.get("token")
-                storage.refresh_token = dict_credentials.get("refresh_token")
-                storage.token_uri = dict_credentials.get("token_uri")
-                storage.client_id = dict_credentials.get("client_id")
-                storage.client_secret = dict_credentials.get("client_secret")
-                storage.scopes = dict_credentials.get("scopes")
-                storage.expiry = dict_credentials.get("expiry")
+                store_credentials.token = dict_credentials.get("token")
+                store_credentials.refresh_token = dict_credentials.get("refresh_token")
+                store_credentials.token_uri = dict_credentials.get("token_uri")
+                store_credentials.client_id = dict_credentials.get("client_id")
+                store_credentials.client_secret = dict_credentials.get("client_secret")
+                store_credentials.scopes = dict_credentials.get("scopes")
+                store_credentials.expiry = dict_credentials.get("expiry")
                 db.session.commit()
         except ProgrammingError as e:
             if e.code == "f405":
-                ic(str(e))
                 store_credentials = OauthStorage(**credentials_to_dict(credentials))
                 db.session.add(store_credentials)
                 db.session.commit()
         except Exception as e:
             return {"message": "error: " + str(e)}, 400
-        flask.session["credentials"] = credentials_to_dict(credentials)
+        login_user(store_credentials)
         return {"message": "Stored credentials successfully"}, 201
 
 
@@ -150,14 +151,27 @@ class GooglePublicCallback(MethodResource, Resource):
         # ACTION ITEM: In a production app, you likely want to save these
         #              credentials in a persistent database instead.
         credentials = flow.credentials
-        dict_credentials = credentials_to_dict(credentials)
-        flask.session["credentials"] = dict_credentials
-        ic(dict_credentials)
-        return {}
+        # dict_credentials = credentials_to_dict(credentials)
+        # flask.session["credentials"] = dict_credentials
+        user = OauthStorage(
+            **(credentials_to_dict(credentials) | {"user_type": "public"})
+        )
+        db.session.add(user)
+        db.session.commit()
+        login_user(user)
+        return {"message": "Logged in successfully."}, 200
 
 
 class GoogleLogout(MethodResource, Resource):
     @doc(description="Allows users to log out", tags=["Google"])
     @marshal_with(GoogleAuthResponseSchema)
+    @login_required
     def get(self):
+        identification = current_user.id
+        user_type = current_user.user_type
+        logout_user()
+        if user_type != "admin":
+            ic("deleting user...")  # TODO replace with logging
+            db.session.delete(OauthStorage.query.get(identification))
         flask.session.clear()
+        return {"message": "Logged out successfully."}, 200

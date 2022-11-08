@@ -1,5 +1,6 @@
 import os
 
+import flask_login
 from flask import Flask, request
 from flask_apispec.extension import FlaskApiSpec
 from flask_cors import CORS
@@ -8,6 +9,7 @@ from markupsafe import escape
 
 from app.api.config.settings import config
 from app.api.db.db import db, url
+from app.api.models.token_storage import OauthStorage
 from app.api.routers.calendar.google_authorization import (
     GoogleAuthorization,
     GoogleCallback,
@@ -16,7 +18,10 @@ from app.api.routers.calendar.google_authorization import (
 )
 from app.api.routers.calendar.google_calendar import GoogleCalendar
 
+login_manager = flask_login.LoginManager()
+
 app = Flask(__name__)
+login_manager.init_app(app)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = url
 db.init_app(app)
@@ -48,6 +53,11 @@ docs.register(GoogleLogout)
 def hello():
     name = request.args.get("name", "World")
     return f"Hello, {escape(name)}!"
+
+
+@app.login_manager.user_loader
+def load_user(user_id):
+    return OauthStorage.query.get(user_id)
 
 
 if __name__ == "__main__":
