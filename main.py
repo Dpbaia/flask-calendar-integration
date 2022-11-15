@@ -1,11 +1,14 @@
 import os
 
 import flask_login
+import sentry_sdk
 from flask import Flask, request
 from flask_apispec.extension import FlaskApiSpec
 from flask_cors import CORS
 from flask_restful import Api
 from markupsafe import escape
+from sentry_sdk.integrations.flask import FlaskIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 from app.api.config.settings import config
 from app.api.db.db import db, url
@@ -18,6 +21,11 @@ from app.api.routers.calendar.google_authorization import (
 )
 from app.api.routers.calendar.google_calendar import GoogleCalendar
 
+sentry_sdk.init(
+    dsn=config["sentry"],
+    integrations=[FlaskIntegration(), SqlalchemyIntegration()],
+    traces_sample_rate=1.0,
+)
 login_manager = flask_login.LoginManager()
 
 app = Flask(__name__)
@@ -28,10 +36,9 @@ db.init_app(app)
 
 api = Api(app)
 cors = CORS(app, resources={r"/*": {"origins": config["link_frontend"]}})
-# TODO first do all google endpoints
 # TODO then do the user login auth (with google?) and apply to endpoints
-# TODO implement sentry monitoring
 # TODO maybe refactor this whole add resource and register to a loop?
+
 
 api.add_resource(GoogleAuthorization, "/google/authorization")
 api.add_resource(GoogleCallback, "/google/callback")
