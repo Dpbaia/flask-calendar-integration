@@ -36,16 +36,12 @@ db.init_app(app)
 
 api = Api(app)
 cors = CORS(app, resources={r"/*": {"origins": config["link_frontend"]}})
-# TODO then do the user login auth (with google?) and apply to endpoints
-# TODO maybe refactor this whole add resource and register to a loop?
-
 
 api.add_resource(GoogleAuthorization, "/google/authorization")
 api.add_resource(GoogleCallback, "/google/callback")
 api.add_resource(GooglePublicCallback, "/google/public-callback")
 api.add_resource(GoogleCalendar, "/google/consultation")
 api.add_resource(GoogleLogout, "/google/logout")
-
 
 docs = FlaskApiSpec(app)
 

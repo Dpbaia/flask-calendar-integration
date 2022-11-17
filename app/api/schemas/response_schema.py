@@ -19,3 +19,8 @@ class GoogleCalendarResponseSchema(Schema):
     message = fields.Str(default="Success")
     busyTimes = fields.List(fields.Nested(GoogleDateSchema()), default=[])
     weekday = fields.Str(default="")
+
+
+class GoogleCalendarComparisonResponseSchema(Schema):
+    owner = fields.Nested(GoogleCalendarResponseSchema)
+    user = fields.Nested(GoogleCalendarResponseSchema)
