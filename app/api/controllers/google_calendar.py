@@ -4,7 +4,6 @@ import google.oauth2.credentials
 from flask_login import current_user
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from icecream import ic
 from pytz import timezone
 
 from ..config.settings import config
@@ -40,13 +39,6 @@ class GoogleCalendarsController:
         )
         return info
 
-    def __get_brazil_time(self, time):
-        brazil = timezone("America/Sao_Paulo")
-        # Should catch edge cases such as summer time, checking around midnight, etc.
-        brazil_time = time.astimezone(brazil)
-        brazil_day = brazil_time.replace(hour=00, minute=00)
-        return brazil_day
-
     def get_thirty_days_calendar(self, user=None):
         time = datetime.datetime.now(datetime.timezone.utc)
         brazil_day = self.__get_brazil_time(time)
@@ -65,21 +57,63 @@ class GoogleCalendarsController:
         return info
 
     def get_google_authorization(self, user=None):
-        ic(user)
         if not user:
             credentials = OauthStorage.query.filter(
                 OauthStorage.user_type == "admin"
             ).first()
         else:
             credentials = current_user
-        ic(credentials)
         dictionary_credentials = credentials.__dict__
-        ic(dictionary_credentials)
         del dictionary_credentials["_sa_instance_state"]
         del dictionary_credentials["id"]
         del dictionary_credentials["user_type"]
         creds = google.oauth2.credentials.Credentials(**dictionary_credentials)
         return creds
+
+    def create_event(self, creds, date, time, length, email):
+        beginning_consultation = datetime.datetime.strptime(
+            date + " " + time, "%d-%m-%Y %H:%M"
+        )
+        time = length.split(":")
+        end_of_consultation = beginning_consultation + datetime.timedelta(
+            hours=int(time[0]), minutes=int(time[1])
+        )
+        event = (
+            {  # TODO fill out with the correct information provided by the professional
+                "summary": "Consulta",
+                "location": "",
+                "description": "Consulta",
+                "start": {
+                    "dateTime": beginning_consultation.isoformat(),
+                    "timeZone": "America/Sao_Paulo",
+                },
+                "end": {
+                    "dateTime": end_of_consultation.isoformat(),
+                    "timeZone": "America/Sao_Paulo",
+                },
+                "attendees": [
+                    {"email": config["consultation_email"]},
+                    {"email": email},
+                ],
+                "reminders": {
+                    "useDefault": False,
+                    "overrides": [
+                        {"method": "email", "minutes": 24 * 60},
+                        {"method": "popup", "minutes": 10},
+                    ],
+                },
+            }
+        )
+        service = build("calendar", "v3", credentials=creds)
+        service.events().insert(calendarId="primary", body=event).execute()
+        return self.weekday_to_string_enum[end_of_consultation.weekday()]
+
+    def __get_brazil_time(self, time):
+        brazil = timezone("America/Sao_Paulo")
+        # Should catch edge cases such as summer time, checking around midnight, etc.
+        brazil_time = time.astimezone(brazil)
+        brazil_day = brazil_time.replace(hour=00, minute=00)
+        return brazil_day
 
     def __get_google_calendar_response(self, payload, day_of_the_week, user=False):
         try:
@@ -105,39 +139,3 @@ class GoogleCalendarsController:
             "busyTimes": busy_times,
             "weekday": self.weekday_to_string_enum[day_of_the_week],
         }
-
-    def create_event(self, creds, date, time, length, email):
-        beginning_consultation = datetime.datetime.strptime(
-            date + " " + time, "%d-%m-%Y %H:%M"
-        )
-        time = length.split(":")
-        end_of_consultation = beginning_consultation + datetime.timedelta(
-            hours=int(time[0]), minutes=int(time[1])
-        )
-        event = {  # TODO adjust to correct values after
-            "summary": "Consulta",
-            "location": "",
-            "description": "Consulta",
-            "start": {
-                "dateTime": beginning_consultation.isoformat(),
-                "timeZone": "America/Sao_Paulo",
-            },
-            "end": {
-                "dateTime": end_of_consultation.isoformat(),
-                "timeZone": "America/Sao_Paulo",
-            },
-            "attendees": [
-                {"email": config["consultation_email"]},
-                {"email": email},
-            ],
-            "reminders": {
-                "useDefault": False,
-                "overrides": [
-                    {"method": "email", "minutes": 24 * 60},
-                    {"method": "popup", "minutes": 10},
-                ],
-            },
-        }
-        service = build("calendar", "v3", credentials=creds)
-        service.events().insert(calendarId="primary", body=event).execute()
-        return self.weekday_to_string_enum[end_of_consultation.weekday()]

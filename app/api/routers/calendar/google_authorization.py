@@ -6,7 +6,6 @@ from flask_apispec import doc, marshal_with, use_kwargs
 from flask_apispec.views import MethodResource
 from flask_login import current_user, login_required, login_user, logout_user
 from flask_restful import Resource
-from icecream import ic
 from sqlalchemy.exc import ProgrammingError
 
 from app.api.schemas.request_schema import RequestAdminId
@@ -84,7 +83,7 @@ class GoogleCallback(MethodResource, Resource):
         # )
         flow.redirect_uri = flask.url_for(
             "googlecallback", _external=True
-        )  # TODO change to the front-end url.
+        )  # TODO adjust accordingly if coupled with a separate front-end.
 
         # Use the authorization server's response to fetch the OAuth 2.0 tokens.
         authorization_response = flask.request.url
@@ -141,7 +140,7 @@ class GooglePublicCallback(MethodResource, Resource):
         # )
         flow.redirect_uri = flask.url_for(
             "googlepubliccallback", _external=True
-        )  # TODO change to the front-end url.
+        )  # TODO adjust accordingly if coupled with a separate front-end.
 
         # Use the authorization server's response to fetch the OAuth 2.0 tokens.
         authorization_response = flask.request.url
@@ -171,7 +170,6 @@ class GoogleLogout(MethodResource, Resource):
         user_type = current_user.user_type
         logout_user()
         if user_type != "admin":
-            ic("deleting user...")  # TODO replace with logging
             db.session.delete(OauthStorage.query.get(identification))
         flask.session.clear()
         return {"message": "Logged out successfully."}, 200

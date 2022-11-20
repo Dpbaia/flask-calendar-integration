@@ -3,7 +3,6 @@ from flask_apispec.views import MethodResource
 from flask_login import login_required
 from flask_restful import Resource
 from googleapiclient.errors import HttpError
-from icecream import ic
 
 from ...controllers.google_calendar import GoogleCalendarsController
 from ...schemas.request_schema import RequestConsultationSchema, RequestDateSchema
@@ -11,8 +10,6 @@ from ...schemas.response_schema import (
     GoogleCalendarComparisonResponseSchema,
     GoogleCalendarResponseSchema,
 )
-
-# TODO see folder ref
 
 calendar_controller = GoogleCalendarsController()
 
@@ -33,7 +30,6 @@ class GoogleCalendar(MethodResource, Resource):
             info_owner = calendar_controller.get_thirty_days_calendar()
             info_user = calendar_controller.get_thirty_days_calendar(True)
         info = {"owner": info_owner, "user": info_user}
-        ic(info)
         return info, 200
 
     @doc(description="Create a consultation time", tags=["Google", "Google Calendar"])
